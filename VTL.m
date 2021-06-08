@@ -15,21 +15,39 @@ classdef VTL < handle
         function vtl = VTL(speakerFileName)
             %VTL Construct an instance of the VTL API
             vtl.speakerFileName = speakerFileName;
+            [success, msg] = mkdir('VocalTractLabApi');
+            if ~success
+                disp(msg);
+            end
+            addpath('VocalTractLabApi'); % Folder containing the lib files
             if ispc
-                vtl.libName = "VocalTractLabApi";
+                vtl.libName = 'VocalTractLabApi';
             elseif isunix
-                vtl.libName = "libVocalTractLabApi";
+                vtl.libName = 'libVocalTractLabApi';
             end
             vtl.state_samples = 110; % Processing rate in VTL (samples), currently 1 vocal tract state evaluation per 110 audio samples
             vtl.samplerate_audio = 44100; % Global audio sampling rate (44100 Hz default)
             vtl.samplerate_internal = vtl.samplerate_audio / vtl.state_samples; % Internal tract samplerate (ca. 400.9090... default)
             vtl.state_duration = 1 / vtl.samplerate_internal; % Processing rate in VTL (time), currently 2.49433... ms
             vtl.verbose = true; % If true, additional information is printed by some functions
-            vtl.initialize();
+            try
+                vtl.initialize();
+            catch ME
+                if strcmp(ME.identifier, 'MATLAB:loadlibrary:FileNotFound')
+                    disp(ME.message);
+                    % Library not found, try to build from source
+                    success = vtl.build();
+                    if success
+                        vtl.initialize();
+                    else
+                        error('Failed to build from source!');
+                    end
+                end
+            end
         end
         
         function delete(obj)
-            % DELETE Destructor of the class. 
+            % DELETE Destructor of the class.
             obj.close();
         end
         
@@ -41,16 +59,16 @@ classdef VTL < handle
                 elseif isunix
                     loadlibrary(obj.libName, extractAfter(obj.libName, "lib") + ".h");
                 end
-               disp(['Loaded library: ' obj.libName]);
+                disp(['Loaded library: ' obj.libName]);
             end
             
             if ~libisloaded(obj.libName)
                 error(['Failed to load external library: ' obj.libName]);
             end
-               
+            
             failure = calllib(obj.libName, 'vtlInitialize', char(obj.speakerFileName));
             if (failure ~= 0)
-                disp('Error in vtlInitialize()!');   
+                disp('Error in vtlInitialize()!');
                 return;
             end
             
@@ -65,7 +83,7 @@ classdef VTL < handle
             unloadlibrary(obj.libName);
             disp(obj.libName + " unloaded.")
         end
-                
+        
         function version = get_version(obj)
             %GET_VERSION Retrieves the version of the API in terms of the
             % compile date
@@ -77,7 +95,7 @@ classdef VTL < handle
             if obj.verbose
                 disp(['Compile date of the library: ' version]);
             end
-        end        
+        end
         
         function c = get_constants(obj)
             %GET_CONSTANTS Returns the used constants
@@ -87,16 +105,16 @@ classdef VTL < handle
             c.n_tube_sections = 0;
             c.n_tract_params = 0;
             c.n_glottis_params = 0;
-
+            
             [failure, c.audioSamplingRate, c.n_tube_sections, c.n_tract_params, c.n_glottis_params] = ...
                 calllib(obj.libName, 'vtlGetConstants', c.audioSamplingRate, c.n_tube_sections, c.n_tract_params, c.n_glottis_params);
             if(failure)
-                 error("Could not retrieve constants in 'get_constants'!")
+                error("Could not retrieve constants in 'get_constants'!")
             end
         end
         
         function automatic_calculation_of_TRX_and_TRY(obj, varargin)
-            %AUTOMATIC_CALCULATION_OF_TRX_AND_TRY Turns the automatic 
+            %AUTOMATIC_CALCULATION_OF_TRX_AND_TRY Turns the automatic
             % calculation of the tongue root parameters TRX and TRY on or
             % off.
             
@@ -114,7 +132,7 @@ classdef VTL < handle
         function p_info = get_param_info(obj, params)
             % GET_PARAM_INFO Returns information on the parameters of the
             % vocal tract or the glottis model, depending on the params.
-            % 
+            %
             % params: Either the string "tract" or "glottis". Controls
             % which parameters to return.
             
@@ -137,8 +155,8 @@ classdef VTL < handle
             paramNeutral = zeros(1, constants.(key));
             
             [failure, names, paramMin, paramMax, paramNeutral] = ...
-            calllib(obj.libName, endpoint, names, paramMin, ...
-            paramMax, paramNeutral);
+                calllib(obj.libName, endpoint, names, paramMin, ...
+                paramMax, paramNeutral);
             
             if failure ~= 0
                 error("Could not retrieve parameter info in 'get_param_info'!");
@@ -159,14 +177,14 @@ classdef VTL < handle
             
             c = obj.get_constants();
             param = zeros(1, c.n_tract_params);
-
+            
             [failure, ~, param] = ...
-              calllib(obj.libName, 'vtlGetTractParams', char(shape), param);
-
+                calllib(obj.libName, 'vtlGetTractParams', char(shape), param);
+            
             if(failure)
                 error('Could not retrieve the shape parameters!')
             end
-
+            
         end
         
         function export_tract_svg(obj, tract_params, base_file_name)
@@ -177,12 +195,12 @@ classdef VTL < handle
             constants = obj.get_constants();
             if size(tract_params, 2) ~= constants.n_tract_params
                 error("Number of columns does not match number of vocal tract parameters!")
-            end 
+            end
             for k = 1:size(tract_params, 1)
                 tractParams = tract_params(k, :);
                 fileName = string(base_file_name) + "_" + num2str(k) + ".svg";
                 failure = ...
-                calllib(obj.libName, 'vtlExportTractSvg', tractParams, char(fileName));
+                    calllib(obj.libName, 'vtlExportTractSvg', tractParams, char(fileName));
                 if failure ~= 0
                     error('Could not export SVG file!');
                 end
@@ -201,7 +219,7 @@ classdef VTL < handle
             constants = obj.get_constants();
             if size(tract_params, 2) ~= constants.n_tract_params
                 error("Number of columns does not match number of vocal tract parameters!")
-            end 
+            end
             tube_data = table();
             for k = 1:size(tract_params, 1)
                 tractParams = tract_params(k, :);
@@ -214,10 +232,10 @@ classdef VTL < handle
                 [failure, tractParams, tubeLength_cm, ...
                     tubeArea_cm2, tubeArticulator, incisorPos_cm, ...
                     tongueTipSideElevation, velumOpening_cm2] = ...
-                calllib(obj.libName, 'vtlTractToTube', ...
-                tractParams, tubeLength_cm, tubeArea_cm2, ...
-                tubeArticulator, incisorPos_cm, tongueTipSideElevation, ...
-                velumOpening_cm2);
+                    calllib(obj.libName, 'vtlTractToTube', ...
+                    tractParams, tubeLength_cm, tubeArea_cm2, ...
+                    tubeArticulator, incisorPos_cm, tongueTipSideElevation, ...
+                    velumOpening_cm2);
                 if failure ~= 0
                     error('Something went wrong in vtlTractToTube!');
                 end
@@ -240,18 +258,18 @@ classdef VTL < handle
             obj.speakerFileName = speakerFileName;
             obj.initialize();
         end
-                             
+        
         function opts = default_transfer_function_options(obj)
             % DEFAULT_TRANSFER_FUNCTION_OPTIONS Returns the default values
             % of the paramters for the calculation of the transfer function
             % of a vocal tract shape.
             
             opts = struct('spectrumType', 0, 'radiationType', 0, 'boundaryLayer', false, ...
-                    'heatConduction', false, 'softWalls', false, 'hagenResistance', false, ...
-                    'innerLengthCorrections', false, 'lumpedElements', false, 'paranasalSinuses', false, ...
-                    'piriformFossa', false, 'staticPressureDrops', false);
-
-            [~, opts] = ... 
+                'heatConduction', false, 'softWalls', false, 'hagenResistance', false, ...
+                'innerLengthCorrections', false, 'lumpedElements', false, 'paranasalSinuses', false, ...
+                'piriformFossa', false, 'staticPressureDrops', false);
+            
+            [~, opts] = ...
                 calllib(obj.libName, 'vtlGetDefaultTransferFunctionOptions', opts);
         end
         
@@ -272,9 +290,9 @@ classdef VTL < handle
             mag = zeros(1, n_spectrum_samples);
             phase = zeros(1, n_spectrum_samples);
             [failed, ~, opts, mag, phase] = ...
-            calllib(obj.libName, 'vtlGetTransferFunction', tract_params, ...
+                calllib(obj.libName, 'vtlGetTransferFunction', tract_params, ...
                 n_spectrum_samples, opts, mag, phase);
-
+            
             if (failed)
                 error('Could not retrieve vocal tract transfer function!')
             end
@@ -285,7 +303,7 @@ classdef VTL < handle
         end
         
         function synthesis_reset(obj)
-            % SYNTHESIS_RESET Resets the synthesis. 
+            % SYNTHESIS_RESET Resets the synthesis.
             
             failure = calllib(obj.libName, 'vtlSynthesisReset');
             if failure ~= 0
@@ -307,7 +325,7 @@ classdef VTL < handle
             tongueTipSideElevation = tube_data.tongue_tip_side_elevation(1);
             newGlottisParams = glottis_params;
             [failure, audio, tubeLength_cm, tubeArea_cm2, tubeArticulator, ...
-                newGlottisParams] = ... 
+                newGlottisParams] = ...
                 calllib(obj.libName, 'vtlSynthesisAddTube', ...
                 numNewSamples, audio, tubeLength_cm, tubeArea_cm2, ...
                 tubeArticulator, incisorPos_cm, velumOpening_cm, ...
@@ -327,7 +345,7 @@ classdef VTL < handle
                 numNewSamples, audio, tractParams, glottisParams);
             if failure ~= 0
                 error('Something went wrong in vtlSynthesisAddTract!');
-            end            
+            end
         end
         
         function audio = synth_block(obj, tract_params, glottis_params, varargin)
@@ -357,7 +375,7 @@ classdef VTL < handle
                 enableConsoleOutput);
             if failure ~= 0
                 error("Error in 'synth_block'!");
-            end            
+            end
         end
         
         function segment_sequence_to_gestural_score(obj, segFileName, gesFileName)
@@ -385,7 +403,7 @@ classdef VTL < handle
                 duration = numAudioSamples;
             else  % Return the duration in seconds
                 duration = numAudioSamples / obj.samplerate_audio;
-            end            
+            end
         end
         
         function varargout = gestural_score_to_audio(obj, ges_file_path, varargin)
@@ -408,7 +426,7 @@ classdef VTL < handle
                 enableConsoleOutput = 1;
             else
                 enableConsoleOutput = 0;
-            end            
+            end
             numSamples = 0;
             [failure, gesFileName, wavFileName, audio, numSamples] = ...
                 calllib(obj.libName, 'vtlGesturalScoreToAudio', ...
@@ -476,7 +494,7 @@ classdef VTL < handle
             end
             if p.Results.return_audio
                 varargout{1} = audio;
-            end            
+            end
         end
         
         function tract_seq_len = get_tract_seq_len(~, tract_seq_path)
@@ -484,7 +502,7 @@ classdef VTL < handle
             for i = 1:8
                 line = fgetl(fid);
             end
-            tract_seq_len = str2num(line);            
+            tract_seq_len = str2num(line);
         end
         
         function limited_tract_state = tract_state_to_limited_tract_state(obj, tract_params)
@@ -493,7 +511,7 @@ classdef VTL < handle
             for k = 1:size(tract_params, 1)
                 inTractParams = tract_params(k, :);
                 outTractParams = zeros(1, constants.n_tract_params);
-                [outTractParams] = calllib(obj.libName, 'vtlInputTractToLimitedTract', ... 
+                [outTractParams] = calllib(obj.libName, 'vtlInputTractToLimitedTract', ...
                     intractParams, outTractParams);
                 limited_tract_state = [tract_param_data; outTractParams];
             end
@@ -508,7 +526,7 @@ classdef VTL < handle
             fprintf(fileID, '%s  %s  %s\n', 'frequency_Hz', 'magnitude', 'phase_rad');
             for i = 1:length(f)
                 fprintf(fileID, '%f  %f  %f\n', f(i), abs(tf(i)), angle(tf(i)));
-            end            
+            end
             fclose(fileID);
         end
         
@@ -519,6 +537,38 @@ classdef VTL < handle
             TVT = T(2:2:end, :);
             TG = rmmissing(TG, 2);
             TVT = rmmissing(TVT, 2);
+        end
+    end
+    methods (Access = private)
+        function status = build(obj)
+            if ispc
+                % Build the Visual Studio project using MSBuild.exe
+                fprintf("Trying to build using MSBuild...\n");
+                [status, out] = system('"build/MSBuild.bat" VocalTractLabBackend-dev/VocalTractLabApi.vcxproj /p:configuration=Release /p:Platform=x64', '-echo');
+                if status == 0
+                    fprintf("Build successful. Moving library files to folder 'VocalTractLabApi'\n");
+                    [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.dll', ...
+                        'VocalTractLabApi\');
+                    if ~success
+                        disp(msg)
+                    end
+                    [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.lib', ...
+                        'VocalTractLabApi\');
+                    if ~success
+                        disp(msg)
+                    end
+                    [success, msg] = copyfile('VocalTractLabBackend-dev\VocalTractLabApi.h', ...
+                        'VocalTractLabApi\');
+                    if ~success
+                        disp(msg)
+                    end
+                    fprintf("Cleaning up...\n");
+                    rmdir('VocalTractLabBackend-dev\x64', 's');
+                    fprintf("Done.\n");
+                    
+                    status = success;
+                end
+            end
         end
     end
 end
