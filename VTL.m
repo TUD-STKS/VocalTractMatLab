@@ -544,6 +544,8 @@ classdef VTL < handle
             catch ME
                 if strcmp(ME.identifier, 'BuildProcess:CMakeNotFound') || strcmp(ME.identifier, 'BuildProcess:CMakeError')
                     success = false;
+                else
+                    disp(ME.identifier);
                 end
             end
             if ~success
@@ -557,10 +559,12 @@ classdef VTL < handle
                 catch ME
                     if strcmp(ME.identifier, 'BuildProcess:MSBuildNotFound') || strcmp(ME.identifier, 'BuildProcess:MSBuildError')
                         success = false;
+                    else
+                        disp(ME.identifier);
                     end
                 end
                 if ~success
-                    error('Could not build VocalTractLab API library.');
+                    throw(MException('BuildProcess:Failure', 'Could not build VocalTractLab API library.'));
                 end
             end
         end
