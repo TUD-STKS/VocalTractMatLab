@@ -537,6 +537,17 @@ classdef VTL < handle
     end
     methods (Access = private)
         function status = build(obj)
+            if ~exist('VocalTractLabBackend-dev', 'dir')
+                fprintf('VocalTractLab backend repo not found. Looking for zipped repo to extract...\n');
+                archiveName = dir('VocalTractLabBackend-dev*.zip');
+                if isempty(archiveName)
+                    error('Could not find VocalTractLab backend files. Aborting.');
+                else
+                    unzip(archiveName.name);
+                    movefile(archiveName.name(1:end-4), 'VocalTractLabBackend-dev');
+                    delete(archiveName.name);
+                end
+            end
             fprintf("Trying to build using CMake...\n");
             try
                 obj.build_with_CMake();
