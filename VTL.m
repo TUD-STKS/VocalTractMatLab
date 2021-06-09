@@ -36,12 +36,8 @@ classdef VTL < handle
                 if strcmp(ME.identifier, 'MATLAB:loadlibrary:FileNotFound')
                     disp(ME.message);
                     % Library not found, try to build from source
-                    success = vtl.build();
-                    if success
-                        vtl.initialize();
-                    else
-                        error('Failed to build from source!');
-                    end
+                    vtl.build();
+                    vtl.initialize();
                 end
             end
         end
@@ -541,33 +537,94 @@ classdef VTL < handle
     end
     methods (Access = private)
         function status = build(obj)
-            if ispc
-                % Build the Visual Studio project using MSBuild.exe
-                fprintf("Trying to build using MSBuild...\n");
-                [status, out] = system('"build/MSBuild.bat" VocalTractLabBackend-dev/VocalTractLabApi.vcxproj /p:configuration=Release /p:Platform=x64', '-echo');
-                if status == 0
-                    fprintf("Build successful. Moving library files to folder 'VocalTractLabApi'\n");
-                    [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.dll', ...
-                        'VocalTractLabApi\');
-                    if ~success
-                        disp(msg)
-                    end
-                    [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.lib', ...
-                        'VocalTractLabApi\');
-                    if ~success
-                        disp(msg)
-                    end
-                    [success, msg] = copyfile('VocalTractLabBackend-dev\VocalTractLabApi.h', ...
-                        'VocalTractLabApi\');
-                    if ~success
-                        disp(msg)
-                    end
-                    fprintf("Cleaning up...\n");
-                    rmdir('VocalTractLabBackend-dev\x64', 's');
-                    fprintf("Done.\n");
-                    
-                    status = success;
+            fprintf("Trying to build using CMake...\n");
+            try
+                obj.build_with_CMake();
+                success = true;
+            catch ME
+                if strcmp(ME.identifier, 'BuildProcess:CMakeNotFound') || strcmp(ME.identifier, 'BuildProcess:CMakeError')
+                    success = false;
                 end
+            end
+            if ~success
+                try
+                    if ispc
+                        % Build the Visual Studio project using MSBuild.exe
+                        fprintf("Trying to build using MSBuild...\n");
+                        obj.build_with_MSBuild();
+                        success = true;
+                    end
+                catch ME
+                    if strcmp(ME.identifier, 'BuildProcess:MSBuildNotFound') || strcmp(ME.identifier, 'BuildProcess:MSBuildError')
+                        success = false;
+                    end
+                end
+                if ~success
+                    error('Could not build VocalTractLab API library.');
+                end
+            end
+        end
+        
+        function build_with_CMake(obj)
+            [noCMake, out] = system('cmake --version');
+            if noCMake
+                throw(MException('BuildProcess:CMakeNotFound', ...
+                    'Could not find CMake'));
+            end
+            [error, msg] = mkdir('build');
+            cd build;
+            [error, out] = system('cmake ../VocalTractLabBackend-dev -DCMAKE_BUILD_TYPE=Release', '-echo');
+            if error
+                throw(MException('BuildProcess:CMakeError', ...
+                    out));
+            else
+                fprintf("Build tree successfully generated.'\n");
+            end
+            numThreads = maxNumCompThreads;
+            [error, out] = system(['cmake --build . -j', num2str(numThreads)], '-echo');
+            cd ..;
+            if error
+                throw(MException('BuildProcess:CMakeError', ...
+                    out));
+            else
+                fprintf("Build successful. Moving library files to folder 'VocalTractLabApi'\n");
+            end
+            [success, msg] = movefile('build/libVocalTractLabApi.so', 'VocalTractLabApi/');
+            if ~success
+                throw(MException('BuildProcess:FileError', ...
+                    msg));
+            end
+            [success, msg] = copyfile('VocalTractLabBackend-dev/VocalTractLabApi.h', 'VocalTractLabApi/');
+            if ~success
+                throw(MException('BuildProcess:FileError', ...
+                    msg));
+            end
+        end
+        
+        function build_with_MSBuild(obj)
+            [status, out] = system('"build/MSBuild.bat" VocalTractLabBackend-dev/VocalTractLabApi.vcxproj /p:configuration=Release /p:Platform=x64', '-echo');
+            if status == 0
+                fprintf("Build successful. Moving library files to folder 'VocalTractLabApi'\n");
+                [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.dll', ...
+                    'VocalTractLabApi\');
+                if ~success
+                    disp(msg);
+                end
+                [success, msg] = movefile('VocalTractLabBackend-dev\x64\Release\VocalTractLabApi.lib', ...
+                    'VocalTractLabApi\');
+                if ~success
+                    disp(msg);
+                end
+                [success, msg] = copyfile('VocalTractLabBackend-dev\VocalTractLabApi.h', ...
+                    'VocalTractLabApi\');
+                if ~success
+                    disp(msg);
+                end
+                fprintf("Cleaning up...\n");
+                rmdir('VocalTractLabBackend-dev\x64', 's');
+                fprintf("Done.\n");
+                
+                status = success;
             end
         end
     end
