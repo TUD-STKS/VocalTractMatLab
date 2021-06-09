@@ -537,7 +537,7 @@ classdef VTL < handle
     end
     methods (Access = private)
         function status = build(obj)
-            if ~exist('VocalTractLabBackend-dev', 'dir')
+            if ~exist('VocalTractLabBackend-dev', 'dir') || isempty('VocalTractLabBackend-dev/*.cpp')
                 fprintf('VocalTractLab backend repo not found. Looking for zipped repo to extract...\n');
                 archiveName = dir('VocalTractLabBackend-dev*.zip');
                 if isempty(archiveName)
