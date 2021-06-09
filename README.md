@@ -1,6 +1,8 @@
 # VocalTractMatLab
 A MATLAB wrapper for the VocalTractLab API
 
+[![View VocalTractMatLab on File Exchange](https://www.mathworks.com/matlabcentral/images/matlab-file-exchange.svg)](https://de.mathworks.com/matlabcentral/fileexchange/93750-vocaltractmatlab)
+
 ## Getting started
 1. Check out the repository *recursively*:
 ```
