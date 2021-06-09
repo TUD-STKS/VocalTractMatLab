@@ -545,6 +545,7 @@ classdef VTL < handle
                 if strcmp(ME.identifier, 'BuildProcess:CMakeNotFound') || strcmp(ME.identifier, 'BuildProcess:CMakeError')
                     success = false;
                 else
+                    success = false;
                     disp(ME.identifier);
                 end
             end
@@ -577,7 +578,11 @@ classdef VTL < handle
             end
             [error, msg] = mkdir('build');
             cd build;
-            [error, out] = system('cmake ../VocalTractLabBackend-dev -DCMAKE_BUILD_TYPE=Release', '-echo');
+            if isunix
+                [error, out] = system('cmake ../VocalTractLabBackend-dev -DCMAKE_BUILD_TYPE=Release', '-echo');
+            elseif ispc
+                [error, out] = system('cmake ../VocalTractLabBackend-dev', '-echo');
+            end
             if error
                 throw(MException('BuildProcess:CMakeError', ...
                     out));
@@ -585,7 +590,11 @@ classdef VTL < handle
                 fprintf("Build tree successfully generated.'\n");
             end
             numThreads = maxNumCompThreads;
-            [error, out] = system(['cmake --build . -j', num2str(numThreads)], '-echo');
+            if isunix
+                [error, out] = system(['cmake --build . -j', num2str(numThreads)], '-echo');
+            elseif ispc
+                [error, out] = system(['cmake --build . --config Release -j', num2str(numThreads)], '-echo');
+            end
             cd ..;
             if error
                 throw(MException('BuildProcess:CMakeError', ...
@@ -593,7 +602,15 @@ classdef VTL < handle
             else
                 fprintf("Build successful. Moving library files to folder 'VocalTractLabApi'\n");
             end
-            [success, msg] = movefile('build/libVocalTractLabApi.so', 'VocalTractLabApi/');
+            if isunix
+                libFileName = 'build/libVocalTractLabApi.so';
+            elseif ispc
+                libFileName = 'build/Release/VocalTractLabApi.dll';
+            end
+            [success, msg] = movefile(libFileName, 'VocalTractLabApi/');
+            if ispc
+                [success, msg] = movefile('build/Release/VocalTractLabApi.lib', 'VocalTractLabApi/');
+            end
             if ~success
                 throw(MException('BuildProcess:FileError', ...
                     msg));
@@ -603,6 +620,9 @@ classdef VTL < handle
                 throw(MException('BuildProcess:FileError', ...
                     msg));
             end
+            fprintf("Cleaning up...\n");
+            rmdir('build', 's');
+            fprintf("Done.\n");
         end
         
         function build_with_MSBuild(obj)
